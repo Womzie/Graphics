@@ -1,0 +1,422 @@
+
+// open a sequence of .xy  files specified on the commmand line
+// and draw them.
+
+// find ax + by + c = 0 of slicing lines
+// average coordinates to find center of mass
+// (cx,cy) will be on the good side
+// a*cx + b*cy + c
+// a* x + b*y +c. if both positive or both negative then they are on the same side of the line 
+
+
+
+#include "FPToolkit.c"
+#include <string.h>
+#include <math.h>
+#include "M2d_matrix_tools.c"
+#include <stdio.h>
+#include <stdlib.h>
+
+
+#define MAXOBJS 10
+#define MAXPTS 59000
+#define MAXPOLYS 57500
+
+
+
+int numpoints [MAXOBJS];
+int numpolys[MAXOBJS] ;
+double x[MAXOBJS][MAXPTS] ;
+double y[MAXOBJS][MAXPTS] ;
+int psize[MAXOBJS][MAXPOLYS] ;
+int con[MAXOBJS][MAXPOLYS][20] ;
+double red[MAXOBJS][MAXPOLYS],grn[MAXOBJS][MAXPOLYS],blu[MAXOBJS][MAXPOLYS] ;
+double xmid[MAXOBJS], ymid[MAXOBJS], xsmall[MAXOBJS], ysmall[MAXOBJS], xbig[MAXOBJS], ybig[MAXOBJS];
+double sheight, swidth;
+
+
+
+
+double bisect(double p[], double q[], double k){
+
+   
+
+   if((p[1] <  k && k  <= q[1])||(p[1] >=  k && k > q[1])){
+     //G_rgb(1,0,0);
+     //G_fill_circle(x, k,2);
+     double x = (k - p[1])*(q[0] - p[0]) / (q[1] - p[1]) + p[0];
+     
+     return x;
+   }
+   return -1;
+   
+}
+void sort2(double x[], int m){
+  int s,i,k;
+  double temp;
+
+  for (k = 0; k <m;k++){
+       s = k;
+       for(i = k+1; i < m; i++){
+	 if(x[i]<x[s]){s = i;}
+       }
+    temp =x[k];
+    x[k] = x[s];
+    x[s] = temp;
+  }
+}
+
+void sort(double arr[], int n) 
+{ 
+    int i, key, j; 
+    for (i = 1; i < n; i++)
+    { 
+        key = arr[i]; 
+        j = i - 1; 
+  
+        // Move elements of arr[0..i-1],  
+        // that are greater than key, to one 
+        // position ahead of their 
+        // current position
+        while (j >= 0 && arr[j] > key)
+        { 
+            arr[j + 1] = arr[j]; 
+            j = j - 1; 
+        }   
+        arr[j + 1] = key; 
+    } 
+}
+
+
+
+int click_and_save (double x[], double y[]){
+  double p[2], q[2];
+  int n = 0;
+  // red  rectangle
+  G_rgb(1,0,0);
+  
+  G_fill_rectangle(0,0,40,20);
+  
+  G_rgb(1,0,0) ;
+
+
+  
+  while(True){
+    G_wait_click(p) ;
+    // if click green area, draw last line and exit
+    if (p[1] <= 20 && p[0] <= 40){
+      G_line(x[0], y[0], x[n-1], y[n-1]);
+
+      G_wait_click(p);
+      // bisect and cut
+      
+      break;
+    }
+
+    // save points in array
+    x[n] = p[0];
+    y[n] = p[1];
+
+    // snap
+    //x[n] = floor((x[n]+10)/20) * 20;
+    //y[n] = floor((y[n]+10)/20) * 20;
+    
+    
+    G_fill_circle(x[n],y[n],2);
+    // draw lines from point to point except first
+    if( n > 0){
+      G_line(x[n-1], y[n-1], x[n], y[n]);
+    }
+ 
+    n++;
+  }
+  
+
+  // fill 
+  return n;
+  
+
+}
+
+int test()
+{
+  double xp[1000],yp[1000],p1 ;
+  int m ;
+  double xq[500], yq[500],p2 ;
+  int n ;
+  double P[2] ;
+
+
+  
+    
+  // grid
+  //G_rgb(0.3,0.2,0.4);
+  //for(int x = 0; x < swidth; x+= 20){
+  //  G_line(x, 0, x ,sheight);
+  //}
+  //for(int y = 0; y < sheight; y+= 20){
+  //  G_line(0, y, swidth, y);
+  //}
+
+  
+  G_rgb(1,0,0) ;
+  m = click_and_save(xp,yp) ;
+
+
+  G_wait_key() ;
+
+   //   G_save_image_to_file("demo.xwd") ;
+   G_save_to_bmp_file("polyfill.bmp") ;
+	     
+}
+
+
+int print_object (FILE *fout, int onum)
+{
+  int i,j,k ;
+
+  fprintf(fout, "%d\n",numpoints[onum]) ;
+
+  for (i = 0 ; i < numpoints[onum] ; i++) {
+    fprintf(fout, "%12.6lf %12.6lf\n",x[onum][i],y[onum][i]) ;
+  }
+  
+  k = 0 ;
+  for (i = 0 ; i < numpolys[onum] ; i++) {
+    fprintf(fout, "%3d    ",psize[onum][i]) ;
+
+    for (j = 0 ; j < psize[onum][i] ; j++) {
+      fprintf(fout, "%2d ", con[onum][i][j]) ;
+    }
+    fprintf(fout, "\n") ;
+  }
+
+
+  for (i = 0 ; i < numpolys[onum] ; i++) {
+    fprintf(fout,"%lf %lf %lf\n",red[onum][i],grn[onum][i],blu[onum][i]) ;
+  }      
+}
+
+
+int draw_object (int onum)
+{
+  int h,i,j ;
+  double xp[100],yp[100] ;
+  int np ;
+
+  G_rgb(0,0,0) ;
+  G_clear() ;
+
+  for (i = 0 ; i < numpolys[onum] ; i++) {
+
+    np = psize[onum][i] ;
+    for (j = 0 ; j < np ; j++) {
+      h = con[onum][i][j] ;
+      xp[j] = x[onum][h] ;
+      yp[j] = y[onum][h] ;
+    }
+
+    G_rgb(red[onum][i], grn[onum][i], blu[onum][i]) ;
+    G_fill_polygon(xp,yp,np) ;
+  }
+}
+
+
+
+
+void findmiddle(int onum){
+  xsmall[onum] = swidth;
+  xbig[onum] = 0;
+  int i;
+  for(i = 0; i < numpoints[onum]; i++){
+    if(xsmall[onum] > x[onum][i]) xsmall[onum] = x[onum][i];
+    if(xbig[onum] < x[onum][i]) xbig[onum] = x[onum][i];
+    
+  }
+  xmid[onum] = (xbig[onum] + xsmall[onum]) / 2;
+
+  
+  ysmall[onum] = sheight;
+  ybig[onum] = 0;
+  for(i = 0; i < numpoints[onum]; i++){
+    if(ysmall[onum] > y[onum][i]) ysmall[onum] = y[onum][i];
+    if(ybig[onum] < y[onum][i]) ybig[onum] = y[onum][i];
+    
+  }
+  ymid[onum] = (ybig[onum] + ysmall[onum]) / 2;
+  
+}
+
+
+
+
+int read_object(FILE *f, int onum)
+{
+  int i,j,k ;
+  // point info
+  fscanf(f,"%d",&numpoints[onum]) ;
+
+  if (numpoints[onum] >= MAXPTS) {
+    // need an extra for object centering
+    printf("MAXPTS = %d :  exceeded.\n",MAXPTS) ;
+    exit(1) ;
+  }
+
+  for (i = 0 ; i < numpoints[onum] ; i++) {
+    fscanf(f,"%lf %lf",&x[onum][i],&y[onum][i]) ;
+  }
+
+  // connectivity info
+  fscanf(f,"%d",&numpolys[onum]) ;
+  if (numpolys[onum] > MAXPOLYS) {
+    printf("MAXPOLYS = %d :  exceeded.\n",MAXPOLYS) ;
+    exit(1) ;
+  }
+    
+  k = 0 ;
+  for (i = 0 ; i < numpolys[onum] ; i++) {
+    fscanf(f,"%d",&psize[onum][i]) ;
+    for (j = 0 ; j < psize[onum][i] ; j++) {
+      fscanf(f,"%d",&con[onum][i][j]) ;
+    } // end for j
+  } // end for i
+
+    
+    // color info :
+  for (i = 0 ; i < numpolys[onum] ; i++) {
+    fscanf(f,"%lf %lf %lf",&red[onum][i],&grn[onum][i],&blu[onum][i]) ;
+  }
+
+
+  double t[3][3], s[3][3], m[3][3];
+  findmiddle(onum);
+  M2d_make_translation(t, -xmid[onum], -ymid[onum]);
+
+  
+  double scalex = (swidth * 0.8) / (xbig[onum] - xsmall[onum]);
+  double scaley = (sheight * 0.8) / (ybig[onum] - ysmall[onum]);
+  if(scalex <= scaley) M2d_make_scaling(s,scalex, scalex);
+  if(scalex > scaley) M2d_make_scaling(s, scaley, scaley);
+
+  
+  
+  M2d_make_translation(m, (swidth/2), (sheight/2));
+  M2d_mat_mult(s, s, t);
+  M2d_mat_mult(m, m, s);
+  
+  M2d_mat_mult_points(x[onum],y[onum],m, x[onum], y[onum], numpoints[onum]); // expensive, call as rarely as possible
+  findmiddle(onum);
+
+}
+
+
+
+
+int main(int argc, char **argv)
+{
+  FILE *fin ;
+  int key,w ;
+  
+  int numobs = 0;
+  swidth = 800;
+  sheight = 800;
+
+  if(argc > 1){
+    char fname[100] ;
+    for(int i = 1; i < argc; i++){
+
+      memset(fname, 0, sizeof fname);
+
+      int j = 0 ;
+      while (argv[i][j] != '\0') {
+	fname[j] = argv[i][j];
+	j++ ;
+      }
+     
+
+      fin = fopen(fname,"r") ;
+      if (fin == NULL) {
+        printf("Cant open file %s\n", fname);
+      }
+      read_object(fin,i-1) ;
+      numobs++;
+    }
+  
+  }
+  else{
+    char fname[100];
+    for(int k = 0; k < MAXOBJS; k++){
+      printf("enter name of xy file ") ;
+      scanf("%s",fname) ;
+  
+      fin = fopen(fname,"r") ;
+      if (fin == NULL) {
+        break;
+      }
+      numobs++;
+      read_object(fin,k) ;
+
+    }
+  }
+
+
+
+  
+  //  print_object(stdout, 0) ;
+
+  G_init_graphics(swidth,sheight) ;
+
+  G_rgb(0,0,0) ;
+  G_clear() ;
+  
+  int onum = 0;
+  int i = 0;
+
+
+      
+  double r[3][3], t[3][3], z[3][3];
+  M2d_make_translation(t, -swidth/2, -sheight/2);
+  M2d_make_rotation(r, 3 * M_PI/180);
+  M2d_make_translation(z, swidth/2, sheight/2);
+  M2d_mat_mult(r,  r,t);
+  M2d_mat_mult(r,  z, r);  
+
+
+
+
+  while(True){
+    // center it
+    
+
+
+    draw_object(onum) ;
+    
+    
+    //G_rgb(1,0,0);
+    //G_fill_circle(xmid[onum],ymid[onum],5);
+
+    key = G_wait_key();
+    if(key == 'q'){
+      break;
+    }
+    if(key == 'c'){
+      test();
+    }
+    
+    else if(key == 'r'){
+      
+      M2d_mat_mult_points(x[onum], y[onum], r, x[onum], y[onum], numpoints[onum]);
+      draw_object(onum);
+    }
+
+    else if ('0' <= key && key <= '9'){
+      w = key - '0';
+      if(w < numobs){onum = w;}
+
+    }
+    i ++;
+  }
+
+}
+
+

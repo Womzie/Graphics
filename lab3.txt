@@ -1,0 +1,16 @@
+make infinite cuts along the convex polygon and slice polygon
+find good side where other points on polygon are, keep goodside remove bad side
+0 -> 1 -> 2 -> 3 -> 4 -> 0
+good good bad  bad  good good
+
+Becomes 
+  1    A    B    4    0
+  
+
+good1 -> good2 | good2
+good  -> bad   | find intersect
+bad   -> good  | find intersect, good
+bad   -> bad   | nothing
+
+
+do for every polygon
